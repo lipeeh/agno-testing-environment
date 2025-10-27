@@ -1,0 +1,8 @@
+agno[infra]>=0.8.0
+uvicorn[standard]>=0.24.0
+fastapi>=0.104.0
+psycopg[binary]>=3.1.0
+pgvector>=0.2.0
+python-dotenv>=1.0.0
+curl-cffi>=0.6.0
+requests>=2.31.0
