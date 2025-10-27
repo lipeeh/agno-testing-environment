@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Core Agno imports
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
-from agno.knowledge.base import Knowledge
+from agno.knowledge.knowledge import Knowledge  # FIXED: Corrected import path
 from agno.os import AgentOS
 from agno.team import Team
 from agno.vectordb.pgvector import PgVector
