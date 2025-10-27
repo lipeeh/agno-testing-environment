@@ -1,4 +1,4 @@
-"""AgentOS FastAPI Application for Production Deployment"""
+"""AgentOS FastAPI Application for Production Deployment with AG-UI"""
 
 import os
 import logging
@@ -17,6 +17,13 @@ from agno.team import Team
 from agno.vectordb.pgvector import PgVector
 from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
+
+# AG-UI interface
+try:
+    from agno.os.interfaces.agui import AGUI
+except Exception as e:
+    AGUI = None
+    logger.warning(f"AGUI interface not available: {e}")
 
 # Model imports with error handling
 try:
@@ -58,7 +65,6 @@ vector_db = PgVector(
 # Configure models based on available API keys
 models: Dict[str, Any] = {}
 
-# OpenAI Configuration (uses id instead of model)
 if os.getenv("OPENAI_API_KEY") and OpenAIChat:
     try:
         models["openai"] = OpenAIChat(id="gpt-4o")
@@ -66,7 +72,6 @@ if os.getenv("OPENAI_API_KEY") and OpenAIChat:
     except Exception as e:
         logger.error(f"❌ Failed to configure OpenAI: {e}")
 
-# Anthropic Configuration (already uses id)
 if os.getenv("ANTHROPIC_API_KEY") and Claude:
     try:
         models["anthropic"] = Claude(id="claude-3-5-sonnet-20241022")
@@ -74,7 +79,6 @@ if os.getenv("ANTHROPIC_API_KEY") and Claude:
     except Exception as e:
         logger.error(f"❌ Failed to configure Anthropic: {e}")
 
-# Google Configuration (Gemini typically uses model string param name 'model', keep guarded)
 if os.getenv("GOOGLE_API_KEY") and Gemini:
     try:
         models["gemini"] = Gemini(model="gemini-1.5-pro")
@@ -82,7 +86,6 @@ if os.getenv("GOOGLE_API_KEY") and Gemini:
     except Exception as e:
         logger.error(f"❌ Failed to configure Google: {e}")
 
-# Groq Configuration (uses id instead of model)
 if os.getenv("GROQ_API_KEY") and Groq:
     try:
         models["groq"] = Groq(id="llama-3.1-70b-versatile")
@@ -90,14 +93,13 @@ if os.getenv("GROQ_API_KEY") and Groq:
     except Exception as e:
         logger.error(f"❌ Failed to configure Groq: {e}")
 
-# Fallback: Create at least one agent with basic configuration if no models available
 if not models:
     logger.warning("⚠️  No LLM models configured. Creating basic agent for testing.")
     models["basic"] = None
 
 logger.info(f"Configured {len(models)} model(s): {list(models.keys())}")
 
-# Setup knowledge base (without db kwarg)
+# Setup knowledge base
 knowledge = None
 try:
     knowledge = Knowledge(
@@ -116,7 +118,6 @@ workflows = []
 
 for model_name, model in models.items():
     try:
-        # Create agent with RAG enabled when knowledge available
         agent = Agent(
             name=f"Agent {model_name.title()}",
             model=model,
@@ -165,7 +166,15 @@ for model_name, model in models.items():
     except Exception as e:
         logger.error(f"❌ Failed to create resources for {model_name}: {e}")
 
-# Setup AgentOS without db kwarg
+# Setup AgentOS with AG-UI interface if available
+interfaces = []
+if AGUI and agents:
+    try:
+        interfaces.append(AGUI(agent=agents[0]))
+        logger.info("✅ AG-UI interface enabled")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not enable AG-UI: {e}")
+
 try:
     agent_os = AgentOS(
         description="Complete Agno Testing Environment",
@@ -173,6 +182,7 @@ try:
         teams=teams,
         workflows=workflows,
         knowledge=[knowledge] if knowledge else [],
+        interfaces=interfaces,
     )
     logger.info("✅ AgentOS initialized successfully")
 except Exception as e:
@@ -183,6 +193,7 @@ except Exception as e:
         teams=[],
         workflows=[],
         knowledge=[],
+        interfaces=[],
     )
 
 # Get the FastAPI app
@@ -191,28 +202,15 @@ app = agent_os.get_app()
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    try:
-        return {
-            "status": "healthy",
-            "agents": len(agents),
-            "teams": len(teams),
-            "workflows": len(workflows),
-            "models": [k for k in models.keys()],
-            "database": "connected",
-            "knowledge_base": knowledge is not None,
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-        }
+    return {"status": "ok", "instantiated_at": str(os.times().elapsed)}
 
 @app.get("/")
 async def root():
     return {
-        "message": "🤖 Agno Testing Environment is running!",
-        "status": "active",
-        "endpoints": {"health": "/health", "docs": "/docs", "playground": "/playground"},
+        "name": "AgentOS API",
+        "description": "Complete Agno Testing Environment",
+        "id": agent_os.id if hasattr(agent_os, "id") else "unknown",
+        "version": "1.0.0",
     }
 
 if __name__ == "__main__":
