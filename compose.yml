@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: agnohq/pgvector:16
+    container_name: agno-postgres
+    environment:
+      POSTGRES_DB: agno_db
+      POSTGRES_USER: agno_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agno_user -d agno_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  agno-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agno-app
+    environment:
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: agno_user
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?}
+      DB_DATABASE: agno_db
+      DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
+      
+      # Application Configuration
+      PORT: 80
+      HOST: 0.0.0.0
+      RUNTIME_ENV: production
+      
+      # LLM API Keys (Required)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?}
+      GROQ_API_KEY: ${GROQ_API_KEY:?}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:?}
+      XAI_API_KEY: ${XAI_API_KEY:?}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?}
+      
+      # AgentOS Configuration
+      AGENTOS_DATABASE_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
+      AGENTOS_VECTOR_DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  app_data:
+    driver: local
+
+networks:
+  default:
+    name: agno-network
