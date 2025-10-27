@@ -25,26 +25,19 @@ services:
       dockerfile: Dockerfile
     container_name: agno-app
     environment:
-      # Database Configuration
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: agno_user
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       DB_DATABASE: agno_db
       DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
-      
-      # Application Configuration
       PORT: 80
       HOST: 0.0.0.0
       RUNTIME_ENV: production
       PYTHONUNBUFFERED: 1
       PYTHONPATH: /app
-      
-      # AgentOS Configuration
       AGENTOS_DATABASE_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
       AGENTOS_VECTOR_DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
-      
-      # LLM API Keys (Optional - system gracefully handles missing keys)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
@@ -52,7 +45,6 @@ services:
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +58,21 @@ services:
       timeout: 15s
       retries: 3
       start_period: 120s
+
+  agent-ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agent-ui
+    environment:
+      NEXT_PUBLIC_AGENTOS_URL: ${NEXT_PUBLIC_AGENTOS_URL:-https://agno.gohorse.srv.br}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   postgres_data:
