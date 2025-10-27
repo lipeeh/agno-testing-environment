@@ -5,7 +5,7 @@ from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.knowledge.knowledge import Knowledge
 from agno.models.openai import OpenAIChat
-from agno.models.anthropic import Anthropic
+from agno.models.anthropic import Claude
 from agno.models.google import Gemini
 from agno.models.groq import Groq
 from agno.os import AgentOS
@@ -32,7 +32,7 @@ if os.getenv("OPENAI_API_KEY"):
     models["openai"] = OpenAIChat(model="gpt-4o")
 
 if os.getenv("ANTHROPIC_API_KEY"):
-    models["anthropic"] = Anthropic(model="claude-3-5-sonnet-20241022")
+    models["anthropic"] = Claude(id="claude-3-5-sonnet-20241022")
 
 if os.getenv("GOOGLE_API_KEY"):
     models["gemini"] = Gemini(model="gemini-1.5-pro")
