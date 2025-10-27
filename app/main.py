@@ -2,8 +2,7 @@
 
 import os
 import logging
-from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Core Agno imports
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
-from agno.knowledge.knowledge import Knowledge  # FIXED: Corrected import path
+from agno.knowledge.knowledge import Knowledge
 from agno.os import AgentOS
 from agno.team import Team
 from agno.vectordb.pgvector import PgVector
@@ -52,22 +51,22 @@ db = PostgresDb(db_url=db_url)
 
 # Vector database for knowledge
 vector_db = PgVector(
-    db_url=db_url, 
-    table_name="knowledge_vectors"
+    db_url=db_url,
+    table_name="knowledge_vectors",
 )
 
 # Configure models based on available API keys
 models: Dict[str, Any] = {}
 
-# OpenAI Configuration
+# OpenAI Configuration (uses id instead of model)
 if os.getenv("OPENAI_API_KEY") and OpenAIChat:
     try:
-        models["openai"] = OpenAIChat(model="gpt-4o")
+        models["openai"] = OpenAIChat(id="gpt-4o")
         logger.info("✅ OpenAI model configured")
     except Exception as e:
         logger.error(f"❌ Failed to configure OpenAI: {e}")
 
-# Anthropic Configuration
+# Anthropic Configuration (already uses id)
 if os.getenv("ANTHROPIC_API_KEY") and Claude:
     try:
         models["anthropic"] = Claude(id="claude-3-5-sonnet-20241022")
@@ -75,18 +74,18 @@ if os.getenv("ANTHROPIC_API_KEY") and Claude:
     except Exception as e:
         logger.error(f"❌ Failed to configure Anthropic: {e}")
 
-# Google Configuration
+# Google Configuration (Gemini typically uses model string param name 'model', keep guarded)
 if os.getenv("GOOGLE_API_KEY") and Gemini:
     try:
         models["gemini"] = Gemini(model="gemini-1.5-pro")
-        logger.info("✅ Google model configured")  
+        logger.info("✅ Google model configured")
     except Exception as e:
         logger.error(f"❌ Failed to configure Google: {e}")
 
-# Groq Configuration
+# Groq Configuration (uses id instead of model)
 if os.getenv("GROQ_API_KEY") and Groq:
     try:
-        models["groq"] = Groq(model="llama-3.1-70b-versatile")
+        models["groq"] = Groq(id="llama-3.1-70b-versatile")
         logger.info("✅ Groq model configured")
     except Exception as e:
         logger.error(f"❌ Failed to configure Groq: {e}")
@@ -94,10 +93,21 @@ if os.getenv("GROQ_API_KEY") and Groq:
 # Fallback: Create at least one agent with basic configuration if no models available
 if not models:
     logger.warning("⚠️  No LLM models configured. Creating basic agent for testing.")
-    # This will use default configuration or mock responses for testing
-    models["basic"] = "basic_model_placeholder"
+    models["basic"] = None
 
 logger.info(f"Configured {len(models)} model(s): {list(models.keys())}")
+
+# Setup knowledge base (without db kwarg)
+knowledge = None
+try:
+    knowledge = Knowledge(
+        name="Agno Knowledge Base",
+        description="Central knowledge repository for all agents",
+        vector_db=vector_db,
+    )
+    logger.info("✅ Knowledge base configured")
+except Exception as e:
+    logger.error(f"❌ Failed to configure knowledge base: {e}")
 
 # Setup agents, teams, and workflows
 agents = []
@@ -106,10 +116,10 @@ workflows = []
 
 for model_name, model in models.items():
     try:
-        # Create agent
+        # Create agent with RAG enabled when knowledge available
         agent = Agent(
             name=f"Agent {model_name.title()}",
-            model=model if model != "basic_model_placeholder" else None,
+            model=model,
             db=db,
             enable_session_summaries=True,
             enable_user_memories=True,
@@ -117,23 +127,24 @@ for model_name, model in models.items():
             num_history_runs=5,
             add_datetime_to_context=True,
             markdown=True,
-            description=f"AI Agent powered by {model_name}"
+            description=f"AI Agent powered by {model_name}",
+            knowledge=knowledge,
+            add_knowledge_to_context=True,
+            search_knowledge=True,
         )
         agents.append(agent)
-        
-        # Create team
+
         team = Team(
             id=f"team-{model_name}",
             name=f"Team {model_name.title()}",
-            model=model if model != "basic_model_placeholder" else None,
+            model=model,
             db=db,
             members=[agent],
             enable_user_memories=True,
-            description=f"Team using {model_name} model"
+            description=f"Team using {model_name} model",
         )
         teams.append(team)
-        
-        # Create workflow
+
         workflow = Workflow(
             id=f"workflow-{model_name}",
             name=f"Workflow {model_name.title()}",
@@ -145,50 +156,33 @@ for model_name, model in models.items():
                     description="Analyze the input and provide insights",
                     agent=agent,
                 )
-            ]
+            ],
         )
         workflows.append(workflow)
-        
+
         logger.info(f"✅ Created agent, team, and workflow for {model_name}")
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to create resources for {model_name}: {e}")
 
-# Setup knowledge base
-try:
-    knowledge = Knowledge(
-        name="Agno Knowledge Base",
-        description="Central knowledge repository for all agents",
-        db=db,
-        vector_db=vector_db,
-    )
-    knowledge_list = [knowledge]
-    logger.info("✅ Knowledge base configured")
-except Exception as e:
-    logger.error(f"❌ Failed to configure knowledge base: {e}")
-    knowledge_list = []
-
-# Setup AgentOS
+# Setup AgentOS without db kwarg
 try:
     agent_os = AgentOS(
         description="Complete Agno Testing Environment",
         agents=agents,
         teams=teams,
         workflows=workflows,
-        knowledge=knowledge_list,
-        db=db
+        knowledge=[knowledge] if knowledge else [],
     )
     logger.info("✅ AgentOS initialized successfully")
 except Exception as e:
     logger.error(f"❌ Failed to initialize AgentOS: {e}")
-    # Create minimal AgentOS for health checks
     agent_os = AgentOS(
         description="Minimal Agno Testing Environment",
         agents=[],
         teams=[],
         workflows=[],
         knowledge=[],
-        db=None
     )
 
 # Get the FastAPI app
@@ -197,56 +191,28 @@ app = agent_os.get_app()
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for monitoring"""
     try:
-        # Basic health indicators
-        health_status = {
+        return {
             "status": "healthy",
             "agents": len(agents),
             "teams": len(teams),
             "workflows": len(workflows),
-            "models": list(models.keys()),
-            "database": "connected" if db else "disconnected",
-            "knowledge_base": len(knowledge_list) > 0,
-            "timestamp": os.environ.get("timestamp", "unknown")
+            "models": [k for k in models.keys()],
+            "database": "connected",
+            "knowledge_base": knowledge is not None,
         }
-        
-        # Test database connection if available
-        if db:
-            try:
-                # Simple connection test
-                # Note: This is a basic test, adjust based on your db methods
-                health_status["database_status"] = "connected"
-            except Exception as e:
-                health_status["database_status"] = f"error: {str(e)}"
-                health_status["status"] = "degraded"
-        
-        return health_status
-        
     except Exception as e:
         return {
             "status": "unhealthy",
             "error": str(e),
-            "agents": 0,
-            "teams": 0,
-            "workflows": 0,
-            "models": [],
-            "database": "error"
         }
 
-# Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "message": "🤖 Agno Testing Environment is running!",
-        "version": "2.2.0",
         "status": "active",
-        "endpoints": {
-            "health": "/health",
-            "docs": "/docs",
-            "playground": "/playground"
-        }
+        "endpoints": {"health": "/health", "docs": "/docs", "playground": "/playground"},
     }
 
 if __name__ == "__main__":
