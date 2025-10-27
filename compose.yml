@@ -7,16 +7,19 @@ services:
     environment:
       POSTGRES_DB: agno_db
       POSTGRES_USER: agno_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agno_user -d agno_db"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U agno_user -d agno_db -h localhost"]
+      interval: 15s
+      timeout: 10s
       retries: 5
+      start_period: 30s
+    networks:
+      - agno-network
 
   agno-app:
     build:
@@ -28,7 +31,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: agno_user
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       DB_DATABASE: agno_db
       DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
       
@@ -36,19 +39,21 @@ services:
       PORT: 80
       HOST: 0.0.0.0
       RUNTIME_ENV: production
-      
-      # LLM API Keys (Required)
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?}
-      GROQ_API_KEY: ${GROQ_API_KEY:?}
-      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:?}
-      XAI_API_KEY: ${XAI_API_KEY:?}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?}
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
       
       # AgentOS Configuration
       AGENTOS_DATABASE_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
       AGENTOS_VECTOR_DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
+      
+      # LLM API Keys (Optional - system gracefully handles missing keys)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       
     depends_on:
       postgres:
@@ -56,19 +61,30 @@ services:
     restart: unless-stopped
     volumes:
       - app_data:/app/data
+      - app_storage:/app/storage
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 90s
+      start_period: 120s
+    networks:
+      - agno-network
+    # Coolify v4 specific labels
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.agno-app.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.services.agno-app.loadbalancer.server.port=80"
 
 volumes:
   postgres_data:
     driver: local
   app_data:
     driver: local
+  app_storage:
+    driver: local
 
 networks:
-  default:
-    name: agno-network
+  agno-network:
+    driver: bridge
