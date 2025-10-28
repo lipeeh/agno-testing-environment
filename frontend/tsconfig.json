@@ -10,9 +10,12 @@
     "noEmit": true,
     "strict": true,
     "incremental": true,
+    "esModuleInterop": true,
     "baseUrl": ".",
-    "paths": {}
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": ["next-env.d.ts", ".next/types/**/*.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
