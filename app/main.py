@@ -1,4 +1,4 @@
-"""AgentOS FastAPI Application with CORS enabled and optional AG-UI (disabled)"""
+"""AgentOS FastAPI Application with CORS hardened for production domains"""
 
 import os
 import logging
@@ -196,12 +196,16 @@ except Exception as e:
 # Get the FastAPI app
 app = agent_os.get_app()
 
-# Enable CORS
-ALLOWED_ORIGINS = [
-    os.getenv("FRONTEND_ORIGIN", "http://ikccgcgkk08gcgw8kkw8c4cg.65.108.223.117.sslip.io"),
+# Enable CORS (hardened)
+DEFAULT_ALLOWED = [
+    "https://agno.gohorse.srv.br",
+    "http://ikccgcgkk08gcgw8kkw8c4cg.65.108.223.117.sslip.io",
     "http://localhost:3000",
     "https://localhost:3000",
 ]
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN")
+ALLOWED_ORIGINS = [FRONTEND_ORIGIN] + DEFAULT_ALLOWED if FRONTEND_ORIGIN else DEFAULT_ALLOWED
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -213,7 +217,7 @@ app.add_middleware(
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "instantiated_at": str(os.times().elapsed), "cors": ALLOWED_ORIGINS}
+    return {"status": "ok", "origins": ALLOWED_ORIGINS}
 
 @app.get("/")
 async def root():
@@ -228,3 +232,4 @@ if __name__ == "__main__":
     import uvicorn
     logger.info("🚀 Starting Agno Testing Environment...")
     uvicorn.run(app, host="0.0.0.0", port=80)
+}
