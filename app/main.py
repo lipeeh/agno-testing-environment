@@ -1,4 +1,4 @@
-"""Model registry and AgentOS app wiring with updated model IDs for Groq, OpenAI, Anthropic"""
+"""Model registry and AgentOS app wiring with tools integration"""
 
 import os
 import logging
@@ -17,6 +17,11 @@ from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
 from fastapi.middleware.cors import CORSMiddleware
 
+# Import tools
+from tools.web.google_search import GoogleSearchTools
+from tools.system.file_tools import FileTools
+from tools.system.shell_tools import ShellTools
+
 # Providers
 try:
     from agno.models.openai import OpenAIChat
@@ -32,12 +37,12 @@ except ImportError:
     Groq = None
 
 # ---------- Config ----------
-# Database URL normalization
+# Database URL with new PostgreSQL credentials
 DB_URL = (
     os.getenv("DATABASE_URL")
     or os.getenv("DB_URL")
     or os.getenv("AGENTOS_DATABASE_URL")
-    or "postgresql+psycopg://agno_user:password@postgres:5432/agno_db"
+    or "postgresql+psycopg://postgres:AkqT0Q5kVnCXyIgYPXc2SsTmljgI1DuOTpiXoS5tVAHjl1zKQFFEAYUvlT3pht5k@j8k08cosc8k0g0s0wcsocogo:5432/postgres"
 )
 if DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg://", 1)
@@ -56,6 +61,13 @@ ALLOWED_ORIGINS = [FRONTEND_ORIGIN] + DEFAULT_ALLOWED if FRONTEND_ORIGIN else DE
 # ---------- DB / VectorDB ----------
 db = PostgresDb(db_url=DB_URL)
 vector_db = PgVector(db_url=DB_URL, table_name="knowledge_vectors")
+
+# ---------- Tools initialization ----------
+logger.info("Initializing tools...")
+google_search = GoogleSearchTools()
+file_tools = FileTools()
+shell_tools = ShellTools()
+logger.info("Tools initialized: GoogleSearch, FileTools, ShellTools")
 
 # ---------- Model registry ----------
 models: Dict[str, Any] = {}
@@ -123,6 +135,8 @@ for name, model in models.items():
     provider = (
         "openai" if name.startswith("gpt") else "anthropic" if name.startswith("claude") else "groq"
     )
+    
+    # Create agent with tools integrated
     agent = Agent(
         id=f"agent-{name}",
         name=f"Agent {name}",
@@ -134,12 +148,27 @@ for name, model in models.items():
         num_history_runs=5,
         add_datetime_to_context=True,
         markdown=True,
-        description=f"Agent using {name}",
+        description=f"Agent using {name} with Google Search, File Operations, and Shell Tools",
         knowledge=knowledge,
         add_knowledge_to_context=True,
         search_knowledge=True,
+        # Register tools with agent
+        tools=[
+            google_search.search_web,
+            google_search.search_images,
+            file_tools.create_file,
+            file_tools.read_file,
+            file_tools.list_files,
+            file_tools.delete_file,
+            file_tools.get_file_info,
+            shell_tools.execute_command,
+            shell_tools.list_allowed_commands,
+            shell_tools.get_system_info
+        ]
     )
     agents.append(agent)
+    
+    logger.info(f"Agent {name} created with {len(agent.tools)} tools")
 
     team = Team(
         id=f"team-{provider}",
@@ -148,7 +177,7 @@ for name, model in models.items():
         db=db,
         members=[agent],
         enable_user_memories=True,
-        description=f"Team for provider {provider}",
+        description=f"Team for provider {provider} with integrated tools",
     )
     teams.append(team)
 
@@ -157,13 +186,15 @@ for name, model in models.items():
         name=f"Workflow {name}",
         description=f"Workflow for {name}",
         db=db,
-        steps=[Step(name="analysis", description="Analyze and respond", agent=agent)],
+        steps=[Step(name="analysis", description="Analyze and respond with tools", agent=agent)],
     )
     workflows.append(wf)
 
+logger.info(f"Created {len(agents)} agents, {len(teams)} teams, {len(workflows)} workflows")
+
 # ---------- App ----------
 agent_os = AgentOS(
-    description="Complete Agno Testing Environment",
+    description="Complete Agno Testing Environment with Integrated Tools",
     agents=agents,
     teams=teams,
     workflows=workflows,
@@ -182,11 +213,47 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "origins": ALLOWED_ORIGINS, "models": list(models.keys())}
+    return {
+        "status": "ok", 
+        "origins": ALLOWED_ORIGINS, 
+        "models": list(models.keys()),
+        "agents_with_tools": len(agents),
+        "tools_per_agent": len(agents[0].tools) if agents else 0
+    }
 
 @app.get("/")
 async def root():
-    return {"name": "AgentOS API", "description": "Complete Agno Testing Environment", "version": "1.0.0"}
+    return {
+        "name": "AgentOS API", 
+        "description": "Complete Agno Testing Environment with Integrated Tools", 
+        "version": "1.0.0",
+        "tools_enabled": ["GoogleSearch", "FileTools", "ShellTools"]
+    }
+
+@app.get("/tools")
+async def tools_info():
+    """Endpoint to check available tools"""
+    if not agents:
+        return {"error": "No agents available"}
+    
+    agent_tools = []
+    for agent in agents[:1]:  # Show tools from first agent
+        tools_info = []
+        for tool in agent.tools:
+            tools_info.append({
+                "name": tool.__name__ if hasattr(tool, '__name__') else str(tool),
+                "doc": tool.__doc__ if hasattr(tool, '__doc__') else None
+            })
+        agent_tools.append({
+            "agent_id": agent.id,
+            "tools_count": len(agent.tools),
+            "tools": tools_info
+        })
+    
+    return {
+        "total_agents": len(agents),
+        "sample_agent_tools": agent_tools
+    }
 
 if __name__ == "__main__":
     import uvicorn
