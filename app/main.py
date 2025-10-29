@@ -1,4 +1,4 @@
-"""AgentOS FastAPI Application for Production Deployment with optional AG-UI (temporarily disabled)"""
+"""AgentOS FastAPI Application with CORS enabled and optional AG-UI (disabled)"""
 
 import os
 import logging
@@ -18,13 +18,11 @@ from agno.vectordb.pgvector import PgVector
 from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
 
+# FastAPI & CORS
+from fastapi.middleware.cors import CORSMiddleware
+
 # AG-UI interface (disabled until correct import path/version is confirmed)
 AGUI = None
-# try:
-#     from agno.os.interfaces.agui import AGUI
-# except Exception as e:
-#     AGUI = None
-#     logger.warning(f"AGUI interface not available: {e}")
 
 # Model imports with error handling
 try:
@@ -173,12 +171,6 @@ for model_name, model in models.items():
 
 # Setup AgentOS (without AG-UI for now)
 interfaces = []
-# if AGUI and agents:
-#     try:
-#         interfaces.append(AGUI(agent=agents[0]))
-#         logger.info("✅ AG-UI interface enabled")
-#     except Exception as e:
-#         logger.warning(f"⚠️ Could not enable AG-UI: {e}")
 
 try:
     agent_os = AgentOS(
@@ -204,10 +196,24 @@ except Exception as e:
 # Get the FastAPI app
 app = agent_os.get_app()
 
+# Enable CORS
+ALLOWED_ORIGINS = [
+    os.getenv("FRONTEND_ORIGIN", "http://ikccgcgkk08gcgw8kkw8c4cg.65.108.223.117.sslip.io"),
+    "http://localhost:3000",
+    "https://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "instantiated_at": str(os.times().elapsed)}
+    return {"status": "ok", "instantiated_at": str(os.times().elapsed), "cors": ALLOWED_ORIGINS}
 
 @app.get("/")
 async def root():
