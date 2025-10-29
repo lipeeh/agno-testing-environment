@@ -1,4 +1,4 @@
-"""AgentOS FastAPI Application for Production Deployment with AG-UI"""
+"""AgentOS FastAPI Application for Production Deployment with optional AG-UI (temporarily disabled)"""
 
 import os
 import logging
@@ -18,12 +18,13 @@ from agno.vectordb.pgvector import PgVector
 from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
 
-# AG-UI interface
-try:
-    from agno.os.interfaces.agui import AGUI
-except Exception as e:
-    AGUI = None
-    logger.warning(f"AGUI interface not available: {e}")
+# AG-UI interface (disabled until correct import path/version is confirmed)
+AGUI = None
+# try:
+#     from agno.os.interfaces.agui import AGUI
+# except Exception as e:
+#     AGUI = None
+#     logger.warning(f"AGUI interface not available: {e}")
 
 # Model imports with error handling
 try:
@@ -50,9 +51,13 @@ except ImportError:
     logger.warning("Groq model not available")
     Groq = None
 
-# Database configuration
-db_url = os.getenv("DB_URL", "postgresql+psycopg://agno_user:password@postgres:5432/agno_db")
-logger.info(f"Connecting to database: {db_url.split('@')[1] if '@' in db_url else 'localhost'}")
+# Database configuration (prefer single DATABASE_URL)
+db_url = os.getenv("DATABASE_URL") or os.getenv("DB_URL") or os.getenv("AGENTOS_DATABASE_URL") or "postgresql+psycopg://agno_user:password@postgres:5432/agno_db"
+logger.info(f"Connecting to database: {db_url.split('@')[1] if '@' in db_url else db_url}")
+
+# Normalize SQLAlchemy URL if using postgres:// scheme
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
 
 db = PostgresDb(db_url=db_url)
 
@@ -166,14 +171,14 @@ for model_name, model in models.items():
     except Exception as e:
         logger.error(f"❌ Failed to create resources for {model_name}: {e}")
 
-# Setup AgentOS with AG-UI interface if available
+# Setup AgentOS (without AG-UI for now)
 interfaces = []
-if AGUI and agents:
-    try:
-        interfaces.append(AGUI(agent=agents[0]))
-        logger.info("✅ AG-UI interface enabled")
-    except Exception as e:
-        logger.warning(f"⚠️ Could not enable AG-UI: {e}")
+# if AGUI and agents:
+#     try:
+#         interfaces.append(AGUI(agent=agents[0]))
+#         logger.info("✅ AG-UI interface enabled")
+#     except Exception as e:
+#         logger.warning(f"⚠️ Could not enable AG-UI: {e}")
 
 try:
     agent_os = AgentOS(
