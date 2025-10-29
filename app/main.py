@@ -17,10 +17,10 @@ from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import tools
-from tools.web.google_search import GoogleSearchTools
-from tools.system.file_tools import FileTools
-from tools.system.shell_tools import ShellTools
+# Import tools (absolute import from app package)
+from app.tools.web.google_search import GoogleSearchTools
+from app.tools.system.file_tools import FileTools
+from app.tools.system.shell_tools import ShellTools
 
 # Providers
 try:
@@ -124,19 +124,11 @@ agents: List[Agent] = []
 teams: List[Team] = []
 workflows: List[Workflow] = []
 
-# Choose defaults
-DEFAULTS = {
-    "openai": "gpt-4o",
-    "anthropic": "claude-sonnet-4",
-    "groq": "llama-3.3-70b",
-}
-
 for name, model in models.items():
     provider = (
         "openai" if name.startswith("gpt") else "anthropic" if name.startswith("claude") else "groq"
     )
     
-    # Create agent with tools integrated
     agent = Agent(
         id=f"agent-{name}",
         name=f"Agent {name}",
@@ -152,7 +144,6 @@ for name, model in models.items():
         knowledge=knowledge,
         add_knowledge_to_context=True,
         search_knowledge=True,
-        # Register tools with agent
         tools=[
             google_search.search_web,
             google_search.search_images,
@@ -167,8 +158,6 @@ for name, model in models.items():
         ]
     )
     agents.append(agent)
-    
-    logger.info(f"Agent {name} created with {len(agent.tools)} tools")
 
     team = Team(
         id=f"team-{provider}",
@@ -232,27 +221,13 @@ async def root():
 
 @app.get("/tools")
 async def tools_info():
-    """Endpoint to check available tools"""
     if not agents:
         return {"error": "No agents available"}
-    
-    agent_tools = []
-    for agent in agents[:1]:  # Show tools from first agent
-        tools_info = []
-        for tool in agent.tools:
-            tools_info.append({
-                "name": tool.__name__ if hasattr(tool, '__name__') else str(tool),
-                "doc": tool.__doc__ if hasattr(tool, '__doc__') else None
-            })
-        agent_tools.append({
-            "agent_id": agent.id,
-            "tools_count": len(agent.tools),
-            "tools": tools_info
-        })
-    
+    sample = agents[0]
     return {
-        "total_agents": len(agents),
-        "sample_agent_tools": agent_tools
+        "agent_id": sample.id,
+        "tools_count": len(sample.tools),
+        "tools": [{"name": getattr(t, "__name__", str(t))} for t in sample.tools]
     }
 
 if __name__ == "__main__":
