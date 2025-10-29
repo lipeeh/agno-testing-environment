@@ -7,20 +7,15 @@ services:
       dockerfile: Dockerfile
     container_name: agno-app
     environment:
-      # External Database URL (single source of truth)
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:AkqT0Q5kVnCXyIgYPXc2SsTmljgI1DuOTpiXoS5tVAHjl1zKQFFEAYUvlT3pht5k@j8k08cosc8k0g0s0wcsocogo:5432/postgres}
       DB_URL: ${DATABASE_URL:-postgres://postgres:AkqT0Q5kVnCXyIgYPXc2SsTmljgI1DuOTpiXoS5tVAHjl1zKQFFEAYUvlT3pht5k@j8k08cosc8k0g0s0wcsocogo:5432/postgres}
       AGENTOS_DATABASE_URL: ${DATABASE_URL:-postgres://postgres:AkqT0Q5kVnCXyIgYPXc2SsTmljgI1DuOTpiXoS5tVAHjl1zKQFFEAYUvlT3pht5k@j8k08cosc8k0g0s0wcsocogo:5432/postgres}
       AGENTOS_VECTOR_DB_URL: ${DATABASE_URL:-postgres://postgres:AkqT0Q5kVnCXyIgYPXc2SsTmljgI1DuOTpiXoS5tVAHjl1zKQFFEAYUvlT3pht5k@j8k08cosc8k0g0s0wcsocogo:5432/postgres}
-
-      # App
       PORT: 80
       HOST: 0.0.0.0
       RUNTIME_ENV: production
       PYTHONUNBUFFERED: 1
       PYTHONPATH: /app
-
-      # LLM API Keys (optional)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
@@ -28,7 +23,6 @@ services:
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-
     restart: unless-stopped
     volumes:
       - app_data:/app/data
@@ -45,4 +39,3 @@ volumes:
     driver: local
   app_storage:
     driver: local
-}
