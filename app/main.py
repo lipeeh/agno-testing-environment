@@ -1,4 +1,4 @@
-"""Model registry and AgentOS app wiring with tools integration"""
+"""Model registry and AgentOS app wiring with full toolset"""
 
 import os
 import logging
@@ -17,7 +17,12 @@ from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import tools (absolute import from app package) - FIXED FOR PRODUCTION
+# Official toolkits (broad)
+from agno.tools.duckduckgo import DuckDuckGoTools
+from agno.tools.yfinance import YFinanceTools
+from agno.tools.reasoning import ReasoningTools
+
+# Project-specific tools
 from app.tools.web.google_search import GoogleSearchTools
 from app.tools.system.file_tools import FileTools
 from app.tools.system.shell_tools import ShellTools
@@ -37,7 +42,6 @@ except ImportError:
     Groq = None
 
 # ---------- Config ----------
-# Database URL with new PostgreSQL credentials
 DB_URL = (
     os.getenv("DATABASE_URL")
     or os.getenv("DB_URL")
@@ -62,48 +66,45 @@ ALLOWED_ORIGINS = [FRONTEND_ORIGIN] + DEFAULT_ALLOWED if FRONTEND_ORIGIN else DE
 db = PostgresDb(db_url=DB_URL)
 vector_db = PgVector(db_url=DB_URL, table_name="knowledge_vectors")
 
-# ---------- Tools initialization ----------
-logger.info("🔧 Initializing tools...")
-google_search = GoogleSearchTools()
-file_tools = FileTools()
-shell_tools = ShellTools()
-logger.info("✅ Tools initialized: GoogleSearch, FileTools, ShellTools")
+# ---------- Toolkits ----------
+logger.info("Initializing full toolset…")
+full_tools = [
+    DuckDuckGoTools().search,  # web search
+    YFinanceTools().price,     # finance example
+    ReasoningTools().scratchpad,
+    GoogleSearchTools().search_web,
+    GoogleSearchTools().search_images,
+    FileTools().create_file,
+    FileTools().read_file,
+    FileTools().list_files,
+    FileTools().delete_file,
+    FileTools().get_file_info,
+    ShellTools().execute_command,
+    ShellTools().list_allowed_commands,
+    ShellTools().get_system_info,
+]
 
 # ---------- Model registry ----------
 models: Dict[str, Any] = {}
 
-# OpenAI lineup (enable if key present)
 if os.getenv("OPENAI_API_KEY") and OpenAIChat:
-    models.update(
-        {
-            "gpt-4o": OpenAIChat(id="gpt-4o"),
-            "gpt-4.1": OpenAIChat(id="gpt-4.1"),
-            "gpt-4o-mini": OpenAIChat(id="gpt-4o-mini"),
-        }
-    )
-    logger.info("OpenAI: gpt-4o, gpt-4.1, gpt-4o-mini enabled")
-
-# Anthropic lineup
+    models.update({
+        "gpt-4o": OpenAIChat(id="gpt-4o"),
+        "gpt-4.1": OpenAIChat(id="gpt-4.1"),
+        "gpt-4o-mini": OpenAIChat(id="gpt-4o-mini"),
+    })
 if os.getenv("ANTHROPIC_API_KEY") and Claude:
-    models.update(
-        {
-            "claude-sonnet-4": Claude(id="claude-3-5-sonnet-20241022"),
-            "claude-opus-4.1": Claude(id="claude-3-opus-20240229"),
-            "claude-haiku-3.5": Claude(id="claude-3-5-haiku-20241022"),
-        }
-    )
-    logger.info("Anthropic: sonnet, opus, haiku enabled")
-
-# Groq lineup (replace deprecated)
+    models.update({
+        "claude-sonnet-4": Claude(id="claude-3-5-sonnet-20241022"),
+        "claude-opus-4.1": Claude(id="claude-3-opus-20240229"),
+        "claude-haiku-3.5": Claude(id="claude-3-5-haiku-20241022"),
+    })
 if os.getenv("GROQ_API_KEY") and Groq:
-    models.update(
-        {
-            "llama-3.3-70b": Groq(id="llama-3.3-70b"),
-            "llama-3.1-8b-instant": Groq(id="llama-3.1-8b-instant"),
-            "mixtral-8x7b-32768": Groq(id="mixtral-8x7b-32768"),
-        }
-    )
-    logger.info("Groq: 3.3-70b, 3.1-8b-instant, mixtral enabled")
+    models.update({
+        "llama-3.3-70b": Groq(id="llama-3.3-70b"),
+        "llama-3.1-8b-instant": Groq(id="llama-3.1-8b-instant"),
+        "mixtral-8x7b-32768": Groq(id="mixtral-8x7b-32768"),
+    })
 
 if not models:
     logger.warning("No models enabled — check API keys.")
@@ -128,8 +129,7 @@ for name, model in models.items():
     provider = (
         "openai" if name.startswith("gpt") else "anthropic" if name.startswith("claude") else "groq"
     )
-    
-    # Create agent with tools integrated - PRODUCTION READY
+
     agent = Agent(
         id=f"agent-{name}",
         name=f"Agent {name}",
@@ -141,26 +141,13 @@ for name, model in models.items():
         num_history_runs=5,
         add_datetime_to_context=True,
         markdown=True,
-        description=f"Agent using {name} with Google Search, File Operations, and Shell Tools",
+        description=f"Agent using {name} with full toolset",
         knowledge=knowledge,
         add_knowledge_to_context=True,
         search_knowledge=True,
-        tools=[
-            google_search.search_web,
-            google_search.search_images,
-            file_tools.create_file,
-            file_tools.read_file,
-            file_tools.list_files,
-            file_tools.delete_file,
-            file_tools.get_file_info,
-            shell_tools.execute_command,
-            shell_tools.list_allowed_commands,
-            shell_tools.get_system_info
-        ]
+        tools=full_tools,
     )
     agents.append(agent)
-    
-    logger.info(f"🤖 Agent {name} created with {len(agent.tools)} tools")
 
     team = Team(
         id=f"team-{provider}",
@@ -169,7 +156,7 @@ for name, model in models.items():
         db=db,
         members=[agent],
         enable_user_memories=True,
-        description=f"Team for provider {provider} with integrated tools",
+        description=f"Team for provider {provider} with full toolset",
     )
     teams.append(team)
 
@@ -182,11 +169,9 @@ for name, model in models.items():
     )
     workflows.append(wf)
 
-logger.info(f"🚀 Created {len(agents)} agents, {len(teams)} teams, {len(workflows)} workflows")
-
 # ---------- App ----------
 agent_os = AgentOS(
-    description="Complete Agno Testing Environment with Integrated Tools",
+    description="Complete Agno Testing Environment with Full Toolset",
     agents=agents,
     teams=teams,
     workflows=workflows,
@@ -206,43 +191,27 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {
-        "status": "ok", 
-        "origins": ALLOWED_ORIGINS, 
+        "status": "ok",
+        "origins": ALLOWED_ORIGINS,
         "models": list(models.keys()),
         "agents_with_tools": len(agents),
-        "tools_per_agent": len(agents[0].tools) if agents else 0,
-        "deployment": "production-ready"
+        "tools_per_agent": len(full_tools),
     }
 
 @app.get("/")
 async def root():
     return {
-        "name": "AgentOS API", 
-        "description": "Complete Agno Testing Environment with Integrated Tools", 
+        "name": "AgentOS API",
+        "description": "Complete Agno Testing Environment with Full Toolset",
         "version": "1.0.0",
-        "tools_enabled": ["GoogleSearch", "FileTools", "ShellTools"],
-        "status": "🚀 Production Ready"
+        "tools_enabled": len(full_tools),
     }
 
 @app.get("/tools")
 async def tools_info():
-    """Endpoint to check available tools"""
-    if not agents:
-        return {"error": "No agents available"}
-    
-    sample = agents[0]
-    tools_list = []
-    for tool in sample.tools:
-        tools_list.append({
-            "name": getattr(tool, "__name__", str(tool)),
-            "doc": getattr(tool, "__doc__", "No documentation")[:100] if hasattr(tool, "__doc__") else None
-        })
-    
     return {
-        "agent_id": sample.id,
-        "tools_count": len(sample.tools),
-        "tools": tools_list,
-        "status": "🔧 Tools Active"
+        "tools": [getattr(t, "__name__", str(t)) for t in full_tools],
+        "count": len(full_tools)
     }
 
 if __name__ == "__main__":
