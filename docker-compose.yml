@@ -10,14 +10,10 @@ services:
     container_name: agno-app
     # Variáveis de ambiente
     environment:
-      # Configuração do banco de dados (apontando para o serviço 'postgres')
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: agno_user
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      DB_DATABASE: agno_db
-      AGENTOS_DATABASE_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
-      AGENTOS_VECTOR_DB_URL: postgresql+psycopg://agno_user:${POSTGRES_PASSWORD}@postgres:5432/agno_db
+      # Configuração do banco de dados via variável de ambiente do Coolify
+      # O Coolify injetará a string de conexão completa (ex: postgresql://user:pass@host:port/dbname)
+      AGENTOS_DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      AGENTOS_VECTOR_DB_URL: ${DATABASE_URL:?DATABASE_URL is required}
       
       # Variáveis de ambiente para o Coolify
       PORT: 80 # A porta exposta no Dockerfile
@@ -43,9 +39,6 @@ services:
       # LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       # LANGFUSE_HOST: ${LANGFUSE_HOST:-}
 
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
     volumes:
       - app_data:/app/data
@@ -58,48 +51,7 @@ services:
       retries: 3
       start_period: 120s
 
-  # Serviço do PostgreSQL com pgvector (Banco de Dados)
-  postgres:
-    image: agnohq/pgvector:16
-    container_name: agno-postgres
-    environment:
-      POSTGRES_DB: agno_db
-      POSTGRES_USER: agno_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    # Healthcheck para garantir que o BD está pronto
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agno_user -d agno_db -h localhost"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  # Serviço do Agno Agent UI (Frontend) - Opcional, mas recomendado para o Coolify
-  # NOTA: O Coolify V4 é mais eficiente implantando o frontend separadamente
-  # como uma "Aplicação" Next.js, mas este serviço serve como fallback/alternativa.
-  agent-ui:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: agent-ui
-    environment:
-      # Esta variável deve apontar para o domínio do Backend no Coolify (ex: https://agno.meuprojeto.com)
-      NEXT_PUBLIC_AGENTOS_URL: ${NEXT_PUBLIC_AGENTOS_URL:?NEXT_PUBLIC_AGENTOS_URL is required}
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
 volumes:
-  postgres_data:
-    driver: local
   app_data:
     driver: local
   app_storage:
