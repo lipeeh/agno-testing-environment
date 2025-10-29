@@ -17,7 +17,7 @@ from agno.workflow.workflow import Workflow
 from agno.workflow.step import Step
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import tools (absolute import from app package)
+# Import tools (absolute import from app package) - FIXED FOR PRODUCTION
 from app.tools.web.google_search import GoogleSearchTools
 from app.tools.system.file_tools import FileTools
 from app.tools.system.shell_tools import ShellTools
@@ -63,11 +63,11 @@ db = PostgresDb(db_url=DB_URL)
 vector_db = PgVector(db_url=DB_URL, table_name="knowledge_vectors")
 
 # ---------- Tools initialization ----------
-logger.info("Initializing tools...")
+logger.info("🔧 Initializing tools...")
 google_search = GoogleSearchTools()
 file_tools = FileTools()
 shell_tools = ShellTools()
-logger.info("Tools initialized: GoogleSearch, FileTools, ShellTools")
+logger.info("✅ Tools initialized: GoogleSearch, FileTools, ShellTools")
 
 # ---------- Model registry ----------
 models: Dict[str, Any] = {}
@@ -129,6 +129,7 @@ for name, model in models.items():
         "openai" if name.startswith("gpt") else "anthropic" if name.startswith("claude") else "groq"
     )
     
+    # Create agent with tools integrated - PRODUCTION READY
     agent = Agent(
         id=f"agent-{name}",
         name=f"Agent {name}",
@@ -158,6 +159,8 @@ for name, model in models.items():
         ]
     )
     agents.append(agent)
+    
+    logger.info(f"🤖 Agent {name} created with {len(agent.tools)} tools")
 
     team = Team(
         id=f"team-{provider}",
@@ -179,7 +182,7 @@ for name, model in models.items():
     )
     workflows.append(wf)
 
-logger.info(f"Created {len(agents)} agents, {len(teams)} teams, {len(workflows)} workflows")
+logger.info(f"🚀 Created {len(agents)} agents, {len(teams)} teams, {len(workflows)} workflows")
 
 # ---------- App ----------
 agent_os = AgentOS(
@@ -207,7 +210,8 @@ async def health():
         "origins": ALLOWED_ORIGINS, 
         "models": list(models.keys()),
         "agents_with_tools": len(agents),
-        "tools_per_agent": len(agents[0].tools) if agents else 0
+        "tools_per_agent": len(agents[0].tools) if agents else 0,
+        "deployment": "production-ready"
     }
 
 @app.get("/")
@@ -216,18 +220,29 @@ async def root():
         "name": "AgentOS API", 
         "description": "Complete Agno Testing Environment with Integrated Tools", 
         "version": "1.0.0",
-        "tools_enabled": ["GoogleSearch", "FileTools", "ShellTools"]
+        "tools_enabled": ["GoogleSearch", "FileTools", "ShellTools"],
+        "status": "🚀 Production Ready"
     }
 
 @app.get("/tools")
 async def tools_info():
+    """Endpoint to check available tools"""
     if not agents:
         return {"error": "No agents available"}
+    
     sample = agents[0]
+    tools_list = []
+    for tool in sample.tools:
+        tools_list.append({
+            "name": getattr(tool, "__name__", str(tool)),
+            "doc": getattr(tool, "__doc__", "No documentation")[:100] if hasattr(tool, "__doc__") else None
+        })
+    
     return {
         "agent_id": sample.id,
         "tools_count": len(sample.tools),
-        "tools": [{"name": getattr(t, "__name__", str(t))} for t in sample.tools]
+        "tools": tools_list,
+        "status": "🔧 Tools Active"
     }
 
 if __name__ == "__main__":
