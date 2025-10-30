@@ -30,3 +30,11 @@ numpy>=1.24.0
 # Optional: Additional tools and utilities
 tenacity>=8.2.0
 pillow>=10.0.0
+
+# Toolkits dependencies for full toolset
+# DuckDuckGo
+ddgs>=2.9.5
+# Finance
+yfinance>=0.2.44
+pandas>=2.2.2
+# Reasoning (no extra)
