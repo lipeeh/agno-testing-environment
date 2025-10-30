@@ -1,4 +1,4 @@
-"""Model registry and AgentOS app wiring with full toolset"""
+"""Model registry and AgentOS app wiring with full toolset (toolkits as instances)"""
 
 import os
 import logging
@@ -22,7 +22,7 @@ from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.yfinance import YFinanceTools
 from agno.tools.reasoning import ReasoningTools
 
-# Project-specific tools
+# Project-specific toolkits
 from app.tools.web.google_search import GoogleSearchTools
 from app.tools.system.file_tools import FileTools
 from app.tools.system.shell_tools import ShellTools
@@ -66,22 +66,15 @@ ALLOWED_ORIGINS = [FRONTEND_ORIGIN] + DEFAULT_ALLOWED if FRONTEND_ORIGIN else DE
 db = PostgresDb(db_url=DB_URL)
 vector_db = PgVector(db_url=DB_URL, table_name="knowledge_vectors")
 
-# ---------- Toolkits ----------
+# ---------- Toolkits (instantiate objects, not methods) ----------
 logger.info("Initializing full toolset…")
-full_tools = [
-    DuckDuckGoTools().search,  # web search
-    YFinanceTools().price,     # finance example
-    ReasoningTools().scratchpad,
-    GoogleSearchTools().search_web,
-    GoogleSearchTools().search_images,
-    FileTools().create_file,
-    FileTools().read_file,
-    FileTools().list_files,
-    FileTools().delete_file,
-    FileTools().get_file_info,
-    ShellTools().execute_command,
-    ShellTools().list_allowed_commands,
-    ShellTools().get_system_info,
+full_toolkits = [
+    DuckDuckGoTools(),
+    YFinanceTools(),
+    ReasoningTools(),
+    GoogleSearchTools(),
+    FileTools(),
+    ShellTools(),
 ]
 
 # ---------- Model registry ----------
@@ -145,7 +138,7 @@ for name, model in models.items():
         knowledge=knowledge,
         add_knowledge_to_context=True,
         search_knowledge=True,
-        tools=full_tools,
+        tools=full_toolkits,
     )
     agents.append(agent)
 
@@ -195,7 +188,7 @@ async def health():
         "origins": ALLOWED_ORIGINS,
         "models": list(models.keys()),
         "agents_with_tools": len(agents),
-        "tools_per_agent": len(full_tools),
+        "toolkits_per_agent": len(full_toolkits),
     }
 
 @app.get("/")
@@ -204,14 +197,14 @@ async def root():
         "name": "AgentOS API",
         "description": "Complete Agno Testing Environment with Full Toolset",
         "version": "1.0.0",
-        "tools_enabled": len(full_tools),
+        "toolkits_enabled": len(full_toolkits),
     }
 
 @app.get("/tools")
 async def tools_info():
     return {
-        "tools": [getattr(t, "__name__", str(t)) for t in full_tools],
-        "count": len(full_tools)
+        "toolkits": [t.__class__.__name__ for t in full_toolkits],
+        "count": len(full_toolkits)
     }
 
 if __name__ == "__main__":
